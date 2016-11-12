@@ -1,4 +1,4 @@
-# Blender MTL File: 'Level.blend'
+# Blender MTL File: 'Ball_split.blend'
 # Material Count: 1
 
 newmtl None
@@ -8,4 +8,4 @@ Kd 0.8 0.8 0.8
 Ks 0.8 0.8 0.8
 d 1
 illum 2
-map_Kd C:\Users\Florian\Desktop\Vorlesung\stockfresh_id1682847_d13ad8.jpg
+map_Kd 199.JPG

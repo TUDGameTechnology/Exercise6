@@ -1,303 +1,468 @@
 #include "pch.h"
 
-#include <Kore/Application.h>
 #include <Kore/IO/FileReader.h>
 #include <Kore/Math/Core.h>
-#include <Kore/Math/Random.h>
 #include <Kore/System.h>
 #include <Kore/Input/Keyboard.h>
 #include <Kore/Input/Mouse.h>
 #include <Kore/Audio/Mixer.h>
 #include <Kore/Graphics/Image.h>
 #include <Kore/Graphics/Graphics.h>
-#include <Kore/Log.h>
 #include "ObjLoader.h"
-
-#include "Collision.h"
-#include "PhysicsWorld.h"
-#include "PhysicsObject.h"
 
 using namespace Kore;
 
-
-
-
 namespace {
-	const int width = 1024;
-	const int height = 768;
-	double startTime;
-	Shader* vertexShader;
-	Shader* fragmentShader;
-	Program* program;
 
-	float angle = 0.0f;
-
-
-	bool left;
-	bool right;
-	bool up;
-	bool down;
-
-	// null terminated array of MeshObject pointers
-	MeshObject* objects[] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
-
-	// The sound to play for the winning condition
-	Sound* winSound;
-
-
+struct SceneParameters {
 	// The view projection matrix aka the camera
 	mat4 P;
-	mat4 View;
-	mat4 PV;
+	mat4 V;
 
-	vec3 cameraPosition;
-	vec3 targetCameraPosition;
-	vec3 oldCameraPosition;
+	// Position of the camera in world space
+	vec3 eye = vec3(0, 0, -3);
 
-	vec3 lookAt;
-	vec3 targetLookAt;
-	vec3 oldLookAt;
+	// Position of the light in world space
+	vec3 light;
 
-	MeshObject* sphere;
-	PhysicsObject* po;
+	// Current time
+	float time;
 
-	PhysicsWorld physics;
-	
+	// Add any animation parameters you might need here
+	// You must also set them in the ShaderProgram_PacMan class
+};
 
-	// uniform locations - add more as you see fit
-	TextureUnit tex;
-	ConstantLocation pvLocation;
-	ConstantLocation mLocation;
+SceneParameters sceneParameters;
 
-	double lastTime;
+class ShaderProgram {
 
-	void update() {
-		double t = System::time() - startTime;
-		double deltaT = t - lastTime;
-
-		lastTime = t;
-		Kore::Audio::update();
-		
-		Graphics::begin();
-		Graphics::clear(Graphics::ClearColorFlag | Graphics::ClearDepthFlag, 0xff9999FF, 1000.0f);
-
-		program->set();
-
-		// set the camera
-
-		angle += 0.3f * deltaT;
-
-		float x = 0 + 10 * Kore::cos(angle);
-		float z = 0 + 10 * Kore::sin(angle);
-		
-		targetCameraPosition.set(x, 2, z);
-
-		
-		targetCameraPosition = physics.physicsObjects[0]->GetPosition();
-		targetCameraPosition = targetCameraPosition + vec3(-10, 5, 10);
-		vec3 targetLookAt = physics.physicsObjects[0]->GetPosition();
-
-		
-		// Interpolate the camera to not follow small physics movements
-		float alpha = 0.3f;
-
-		cameraPosition = oldCameraPosition * (1.0f - alpha) + targetCameraPosition * alpha;
-		oldCameraPosition = cameraPosition;
-
-		lookAt = oldLookAt * (1.0f - alpha) + targetLookAt * alpha;
-		oldLookAt = lookAt;
-		
-		
-
-		// Follow the ball with the camera
-		P = mat4::Perspective(60, (float)width / (float)height, 0.1f, 100);
-		View = mat4::lookAt(cameraPosition, lookAt, vec3(0, 1, 0)); 
-		PV = P * View;
-
-
-		Graphics::setMatrix(pvLocation, PV);
-
-
-
-
-
-		// iterate the MeshObjects
-		MeshObject** current = &objects[0];
-		while (*current != nullptr) {
-			// set the model matrix
-			Graphics::setMatrix(mLocation, (*current)->M);
-
-			(*current)->render(tex);
-			++current;
-		} 
-
-		
-
-		physics.Update(deltaT);
-
-
-		PhysicsObject** currentP = &physics.physicsObjects[0];
-	
-
-		// Handle mouse inputs
-		float forceX = 0.0f;
-		float forceZ = 0.0f;
-		if (up) forceX += 1.0f;
-		if (down) forceX -= 1.0f;
-		if (left) forceZ -= 1.0f;
-		if (right) forceZ += 1.0f;
-
-		// Apply gravity
-		vec3 force(forceX, 0.0f, forceZ);
-		force = force * 20.0f;
-		(*currentP)->ApplyForceToCenter(force);
-
-
-
-		while (*currentP != nullptr) {
-			(*currentP)->UpdateMatrix();
-			Graphics::setMatrix(mLocation, (*currentP)->Mesh->M);
-			(*currentP)->Mesh->render(tex);
-			++currentP;
-		}
-		
-
-
-		Graphics::end();
-		Graphics::swapBuffers();
-	}
-
-	void SpawnSphere(vec3 Position, vec3 Velocity) {
-		PhysicsObject* po = new PhysicsObject();
-		po->SetPosition(Position);
-		po->Velocity = Velocity;
-		
-		po->Collider.radius = 0.5f;
-
-		po->Mass = 5;
-		po->Mesh = sphere;
-			
-		// The impulse should carry the object forward
-
-		po->ApplyImpulse(Velocity);
-		physics.AddObject(po);
-	}
-
-	void keyDown(KeyCode code, wchar_t character) {
-		if (code == Key_Space) {
-		} else if (code == Key_Up) {
-			up = true;
-		} else if (code == Key_Down) {
-			down = true;
-		} else if (code == Key_Left) {
-			right = true;
-		} else if (code == Key_Right) {
-			left = true;
-		}
-	}
-
-	void keyUp(KeyCode code, wchar_t character) {
-		if (code == Key_Up) {
-			up = false;
-		} else if (code == Key_Down) {
-			down = false;
-		} else if (code == Key_Left) {
-			right = false;
-		} else if (code == Key_Right) {
-			left = false;
-		}
-	}
-
-	void mouseMove(int x, int y, int movementX, int movementY) {
-
-	}
-	
-	void mousePress(int button, int x, int y) {
-
-	}
-
-	
-
-	void mouseRelease(int button, int x, int y) {
-		
-	}
-
-	void init() {
-		FileReader vs("shader.vert");
-		FileReader fs("shader.frag");
+public:
+	ShaderProgram(const char* vsFile, const char* fsFile, VertexStructure& structure)
+	{
+		// Load and link the shaders
+		FileReader vs(vsFile);
+		FileReader fs(fsFile);
 		vertexShader = new Shader(vs.readAll(), vs.size(), VertexShader);
 		fragmentShader = new Shader(fs.readAll(), fs.size(), FragmentShader);
-
-		// This defines the structure of your Vertex Buffer
-		VertexStructure structure;
-		structure.add("pos", Float3VertexData);
-		structure.add("tex", Float2VertexData);
-		structure.add("nor", Float3VertexData);
 
 		program = new Program;
 		program->setVertexShader(vertexShader);
 		program->setFragmentShader(fragmentShader);
 		program->link(structure);
 
-		tex = program->getTextureUnit("tex");
-		pvLocation = program->getConstantLocation("PV");
+		pLocation = program->getConstantLocation("P");
+		vLocation = program->getConstantLocation("V");
 		mLocation = program->getConstantLocation("M");
+	}
 
-		objects[0] = new MeshObject("Test.obj", "Level/basicTiles6x6.png", structure);
-		objects[1] = new MeshObject("Level/Level_yellow.obj", "Level/basicTiles3x3yellow.png", structure);
-		objects[2] = new MeshObject("Level/Level_red.obj", "Level/basicTiles3x3red.png", structure);
+	// Update this program from the scene parameters
+	virtual void Set(const SceneParameters& parameters, const mat4& M, Texture* diffuse = nullptr, Texture* normalMap = nullptr)
+	{
+		program->set();
+		Graphics::setMatrix(mLocation, M);
+		Graphics::setMatrix(vLocation, parameters.V);
+		Graphics::setMatrix(pLocation, parameters.P);
+	}
 
-		sphere = new MeshObject("ball_at_origin.obj", "Level/unshaded.png", structure);
 
-		float pos = -10.0f;
-		SpawnSphere(vec3(-pos, 5.5f, pos), vec3(0, 0, 0));
+protected:
 
-		physics.meshCollider.mesh = objects[0];
+	Shader* vertexShader;
+	Shader* fragmentShader;
+	Program* program;
+
+	// Uniform locations - add more as you see fit
+	ConstantLocation pLocation;
+	ConstantLocation vLocation;
+	ConstantLocation mLocation;
+};
+
+
+class ShaderProgram_NormalMap : public ShaderProgram {
+	
+public:
+
+	ShaderProgram_NormalMap(const char* vsFile, const char* fsFile, VertexStructure& structure)
+		: ShaderProgram(vsFile, fsFile, structure)
+	{
+		lightLocation = program->getConstantLocation("light");
+		eyeLocation = program->getConstantLocation("eye");
+		tex = program->getTextureUnit("tex");
+		normalMapTex = program->getTextureUnit("normalMap");
+
+		Graphics::setTextureAddressing(tex, Kore::U, Repeat);
+		Graphics::setTextureAddressing(tex, Kore::V, Repeat);
+	}
+
+	virtual void Set(const SceneParameters& parameters, const mat4& M, Texture* diffuse, Texture* normalMap) override
+	{
+		ShaderProgram::Set(parameters, M);
+		Graphics::setTexture(tex, diffuse);
+		Graphics::setTexture(normalMapTex, normalMap);
+		Graphics::setFloat3(lightLocation, parameters.light);
+		Graphics::setFloat3(eyeLocation, parameters.eye);
+	}
+
+
+protected:
+
+	// Texture units
+	TextureUnit tex;
+	TextureUnit normalMapTex;
+
+	// Constant locations
+	ConstantLocation lightLocation;
+	ConstantLocation eyeLocation;
+};
+
+
+class ShaderProgram_PacMan : public ShaderProgram {
+
+public:
+
+	ShaderProgram_PacMan(const char* vsFile, const char* fsFile, VertexStructure& structure)
+		: ShaderProgram(vsFile, fsFile, structure)
+	{
+		timeLocation = program->getConstantLocation("time");
+	}
+
+	void Set(const SceneParameters& parameters, const mat4& M, Texture* diffuse, Texture* normalMap) override
+	{
+		ShaderProgram::Set(parameters, M);
+		Graphics::setFloat(timeLocation, parameters.time);
+	}
+
+
+protected:
+
+	// Constant locations - if you add animation parameters, add them here, get them in the constructor and set them in Set(...)
+	ConstantLocation timeLocation;
+};
+
+class MeshObject {
+public:
+
+	MeshObject(const char* meshFile, const char* textureFile, const char* normalMapFile, const VertexStructure& structure, ShaderProgram* shaderProgram, float scale = 1.0f)
+		: shaderProgram(shaderProgram), image(nullptr), normalMap(nullptr)
+	{
+		mesh = loadObj(meshFile);
+		if (textureFile)
+		{
+			image = new Texture(textureFile);
+		}
+		if (normalMapFile)
+		{
+			normalMap = new Texture(normalMapFile);
+		}
+
+		vertexBuffer = new VertexBuffer(mesh->numVertices, structure, 0);
+		float* vertices = vertexBuffer->lock();
+		int stride = 3 + 2 + 3 + 3 + 3;
+		int strideInFile = 3 + 2 + 3;
+		for (int i = 0; i < mesh->numVertices; ++i) {
+			float* v = &vertices[i * stride];
+			float* meshV = &mesh->vertices[i * strideInFile];
+			v[0] = meshV[0] * scale;
+			v[1] = meshV[1] * scale;
+			v[2] = meshV[2] * scale;
+			v[3] = meshV[3];
+			v[4] = 1.0f - meshV[4];
+			v[5] = meshV[5];
+			v[6] = meshV[6];
+			v[7] = meshV[7];
+		}
+
+		indexBuffer = new IndexBuffer(mesh->numFaces * 3);
+		int* indices = indexBuffer->lock();
+		for (int i = 0; i < mesh->numFaces * 3; i++) {
+			indices[i] = mesh->indices[i];
+		}
+
+		// Calculate the tangent and bitangent vectors
+		// We don't index them here, we just copy them for each vertex
+		for (int i = 0; i < mesh->numIndices / 3; i++)
+		{
+			int index1 = indices[i * 3 + 0];
+			int index2 = indices[i * 3 + 1];
+			int index3 = indices[i * 3 + 2];
+
+			float* vData1 = &vertices[index1 * stride];
+			float* vData2 = &vertices[index2 * stride];
+			float* vData3 = &vertices[index3 * stride];
+
+			vec3 v1(vData1[0], vData1[1], vData1[2]);
+			vec3 v2(vData2[0], vData2[1], vData2[2]);
+			vec3 v3(vData3[0], vData3[1], vData3[2]);
+
+			vec2 uv1(vData1[3], vData1[4]);
+			vec2 uv2(vData2[3], vData2[4]);
+			vec2 uv3(vData3[3], vData3[4]);
+
+			// Edges of the triangle : position delta
+			vec3 deltaPos1 = v2 - v1;
+			vec3 deltaPos2 = v3 - v1;
+
+			// UV delta
+			vec2 deltaUV1 = uv2 - uv1;
+			vec2 deltaUV2 = uv3 - uv1;
+
+			vec3 normal(vData1[5], vData1[6], vData1[7]);
+			/************************************************************************/
+			/* Exercise P6.1 a): Use deltaPos1/2 and deltaUV1/2 to calculate the     /
+			 * tangent and bitangent vectors                                         /
+			/************************************************************************/
+			vec3 tangent = vec3(1.0, 0.0f, 0.0f);
+			vec3 bitangent = vec3(1.0f, 0.0f, 0.0f);
+
+
+
+
+
+
+
+
+
+			// Don't forget to normalize them
+			tangent = tangent.normalize();
+			bitangent = bitangent.normalize();
+
+			// Gram-Schmidt orthogonalization
+			tangent = tangent - normal * normal.dot(tangent);
+
+			// Calculate handedness
+			if (normal.cross(tangent).dot(bitangent) < 0.0f)
+			{
+				tangent = tangent * -1.0f;
+			}
+
+			// Write them out
+			vData1[8] = vData2[8] = vData3[8] = tangent.x();
+			vData1[9] = vData2[9] = vData3[9] = tangent.y();
+			vData1[10] = vData2[10] = vData3[10] = tangent.z();
+			
+			vData1[11] = vData2[11] = vData3[11] = bitangent.x();
+			vData1[12] = vData2[12] = vData3[12] = bitangent.y();
+			vData1[13] = vData2[13] = vData3[13] = bitangent.z(); 
+		} 
+
+		vertexBuffer->unlock();
+		indexBuffer->unlock();
+
+		M = mat4::Identity();
+	}
+
+	void render() {
+		shaderProgram->Set(sceneParameters, M, image, normalMap);
+		Graphics::setVertexBuffer(*vertexBuffer);
+		Graphics::setIndexBuffer(*indexBuffer);
+		Graphics::drawIndexedVertices();
+	}
+
+	// Model matrix of this object
+	mat4 M;
+
+private:
+	VertexBuffer* vertexBuffer;
+	IndexBuffer* indexBuffer;
+	Mesh* mesh;
+	Texture* image;
+	Texture* normalMap;
+	ShaderProgram* shaderProgram;
+};
+
+	const int width = 512;
+	const int height = 512;
+	double startTime;
+
+	// null terminated array of MeshObject pointers
+	MeshObject* objects[] = { nullptr, nullptr, nullptr, nullptr, nullptr };
+	MeshObject* lightMesh = nullptr;
+
+	// Position of the mesh to use for normal mapping
+	vec3 normalMapModel = vec3(2.0, 0.0, 0.0);
+
+	// Initial position of the light
+	vec3 lightStart = vec3(0, 1.95f, 3.0f);
+
+	// Rotation rate of the light
+	float lightRotationRate = 1.0f;
+
+	
+	bool left, right, up, down, forward, backward;
+	
+	void update() {
+		float t = (float)(System::time() - startTime);
+		sceneParameters.time = t;
+		Kore::Audio::update();
+
+		// Animate the light point
+		mat3 rotation = mat3::RotationY(t * lightRotationRate);
+		sceneParameters.light = rotation * lightStart + normalMapModel;
+
+		const float speed = 0.05f;
+		if (left) {
+			sceneParameters.eye.x() -= speed;
+		}
+		if (right) {
+			sceneParameters.eye.x() += speed;
+		}
+		if (forward) {
+			sceneParameters.eye.z() += speed;
+		}
+		if (backward) {
+			sceneParameters.eye.z() -= speed;
+		}
+		if (up) {
+			sceneParameters.eye.y() += speed;
+		}
+		if (down) {
+			sceneParameters.eye.y() -= speed;
+		}
 		
-		// Sound source: http://opengameart.org/content/level-up-sound-effects
+		Graphics::begin();
+		Graphics::clear(Graphics::ClearColorFlag | Graphics::ClearDepthFlag, 0xff000000, 1000.0f);
 		
-		/************************************************************************/
-		/* Task 1.2: Play this sound when the goal is reached                   */
-		/************************************************************************/
-		winSound = new Sound("chipquest.wav");
-		Mixer::play(winSound);
+
+		sceneParameters.V = mat4::lookAt(sceneParameters.eye, vec3(0.0, 0.0, 0.0), vec3(0, 1.0, 0));
+		sceneParameters.P = mat4::Perspective(90.0, (float)width / (float)height, 0.1f, 100);
+
+		// Set the light position
+		lightMesh->M = Kore::mat4::Translation(sceneParameters.light.x(), sceneParameters.light.y(), sceneParameters.light.z());
+
+		MeshObject** current = &objects[0];
+		while (*current != nullptr) {
+			// Render the object
+			(*current)->render();
+			++current;
+		}
+
+		Graphics::end();
+		Graphics::swapBuffers();
+	}
+
+	void keyDown(KeyCode code, wchar_t character) {
+		if (code == Key_Left) {
+			left = true;
+		}
+		else if (code == Key_Right) {
+			right = true;
+		}
+		else if (code == Key_Up) {
+			forward = true;
+		}
+		else if (code == Key_Down) {
+			backward = true;
+		}
+		else if (code == Key_W) {
+			up = true;
+		}
+		else if (code == Key_S) {
+			down = true;
+		}
+	}
+	
+	void keyUp(KeyCode code, wchar_t character) {
+		if (code == Key_Left) {
+			left = false;
+		}
+		else if (code == Key_Right) {
+			right = false;
+		}
+		else if (code == Key_Up) {
+			forward = false;
+		}
+		else if (code == Key_Down) {
+			backward = false;
+		}
+		else if (code == Key_W) {
+			up = false;
+		}
+		else if (code == Key_S) {
+			down = false;
+		}
+	}
+	
+	void mouseMove(int windowId, int x, int y, int movementX, int movementY) {
+
+	}
+	
+	void mousePress(int windowId, int button, int x, int y) {
+
+	}
+
+	void mouseRelease(int windowId, int button, int x, int y) {
+
+	}
+
+	void init() {
+		// This defines the structure of your Vertex Buffer
+		VertexStructure structure;
+		structure.add("pos", Float3VertexData);
+		structure.add("tex", Float2VertexData);
+		structure.add("nor", Float3VertexData);
+		// Additional fields for tangent and bitangent
+		structure.add("tangent", Float3VertexData);
+		structure.add("bitangent", Float3VertexData);
+
+		// Set up the normal mapping shader
+		ShaderProgram* normalMappingProgram = new ShaderProgram_NormalMap("shader.vert", "shader.frag", structure);
+
+		// Set up the pacman shader
+		ShaderProgram* pacManProgram = new ShaderProgram_PacMan("pacman.vert", "pacman.frag", structure);
+
+		objects[0] = new MeshObject("box.obj", "199.jpg", "199_norm.jpg", structure, normalMappingProgram, 1.0f);
+		objects[0]->M = mat4::Translation(normalMapModel.x(), normalMapModel.y(), normalMapModel.z());
+
+		lightMesh = objects[1] = new MeshObject("ball.obj", "light_tex.png", "light_tex.png", structure, normalMappingProgram, 0.3f);
+		lightMesh->M = mat4::Translation(sceneParameters.light.x(), sceneParameters.light.y(), sceneParameters.light.z());
+
+		objects[2] = new MeshObject("PacMan.obj", nullptr, nullptr, structure, pacManProgram);
+		objects[2]->M = mat4::Translation(-2.0f, 0.0f, 0.0f) * mat4::RotationZ(Kore::pi);
 
 		Graphics::setRenderState(DepthTest, true);
 		Graphics::setRenderState(DepthTestCompare, ZCompareLess);
+		Graphics::setRenderState(DepthWrite, true);
 
-		Graphics::setTextureAddressing(tex, U, Repeat);
-		Graphics::setTextureAddressing(tex, V, Repeat);
-
-		
-
-		
+		Graphics::setRenderState(BackfaceCulling, true);
 
 	}
 }
 
 int kore(int argc, char** argv) {
-	Application* app = new Application(argc, argv, width, height, 0, false, "Exercise8");
-	Kore::Mixer::init();
-	Kore::Audio::init();
+	Kore::System::setName("TUD Game Technology - ");
+	Kore::System::setup();
+	Kore::WindowOptions options;
+	options.title = "Exercise 6";
+	options.width = width;
+	options.height = height;
+	options.x = 100;
+	options.y = 100;
+	options.targetDisplay = -1;
+	options.mode = WindowModeWindow;
+	options.rendererOptions.depthBufferBits = 16;
+	options.rendererOptions.stencilBufferBits = 8;
+	options.rendererOptions.textureFormat = 0;
+	options.rendererOptions.antialiasing = 0;
+	Kore::System::initWindow(options);
 
 	init();
 
-	app->setCallback(update);
+	Kore::System::setCallback(update);
+
+	Kore::Mixer::init();
+	Kore::Audio::init();
+
 
 	startTime = System::time();
-	lastTime = 0.0f;
-	
-	
-	
+
+
 	Keyboard::the()->KeyDown = keyDown;
 	Keyboard::the()->KeyUp = keyUp;
 	Mouse::the()->Move = mouseMove;
 	Mouse::the()->Press = mousePress;
 	Mouse::the()->Release = mouseRelease;
 
-	app->start();
+	Kore::System::start();
 
-	delete app;
-	
 	return 0;
 }
