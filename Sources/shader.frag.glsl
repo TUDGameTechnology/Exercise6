@@ -1,6 +1,4 @@
-#ifdef GL_ES
-precision highp float;
-#endif
+#version 450
 
 // Textures for diffuse and normal map
 uniform sampler2D tex;
@@ -11,25 +9,27 @@ uniform vec3 light;
 uniform vec3 eye;
 
 // Position in world space
-varying vec3 position;
+in vec3 position;
 // Texture coordinate
-varying vec2 texCoord;
+in vec2 texCoord;
 
 // Light and camera position in tangent space
-varying vec3 light_tangentspace;
-varying vec3 eye_tangentspace;
+in vec3 light_tangentspace;
+in vec3 eye_tangentspace;
 
 // Distance between the light and the current point. For the DirectX backend, we need to compute this in the vertex shader, if not, it will get a wrong value
-varying float lightDistance;
+in float lightDistance;
 
-void kore(){
+out vec4 frag;
+
+void main() {
 
 	// Color and intensity of the light
 	vec3 LightColor = vec3(1,1,1);
 	float LightPower = 5.0;
 	
 	// Material properties
-	vec3 MaterialDiffuseColor = texture2D( tex, texCoord).rgb;
+	vec3 MaterialDiffuseColor = texture(tex, texCoord).rgb;
 	vec3 MaterialAmbientColor = vec3(0.1,0.1,0.1) * MaterialDiffuseColor;
 	// If we had a specular map, we could plug it in here
 	vec3 MaterialSpecularColor = vec3(1.0, 1.0, 1.0);
@@ -77,5 +77,5 @@ void kore(){
 		MaterialDiffuseColor * LightColor * LightPower * cosTheta * attenuation + 
 		// Specular : reflective highlight, like a mirror
 		MaterialSpecularColor * LightColor * LightPower * pow(cosAlpha,5.0) * attenuation;
-	gl_FragColor = vec4(color, 1.0);
+	frag = vec4(color, 1.0);
 }
