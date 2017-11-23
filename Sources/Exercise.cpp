@@ -127,13 +127,13 @@ public:
 	ShaderProgram_PacMan(const char* vsFile, const char* fsFile, Graphics4::VertexStructure& structure)
 		: ShaderProgram(vsFile, fsFile, structure)
 	{
-//		timeLocation = pipeline->getConstantLocation("time");
+		timeLocation = pipeline->getConstantLocation("time");
 	}
 
 	void Set(const SceneParameters& parameters, const mat4& M, Graphics4::Texture* diffuse, Graphics4::Texture* normalMap) override
 	{
 		ShaderProgram::Set(parameters, M);
-//		Graphics4::setFloat(timeLocation, parameters.time);
+		Graphics4::setFloat(timeLocation, parameters.time);
 	}
 
 

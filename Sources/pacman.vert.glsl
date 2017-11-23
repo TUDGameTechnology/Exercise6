@@ -10,7 +10,7 @@ uniform mat4 P;
 uniform mat4 M;
 
 //The time of the frame
-//uniform float time;
+uniform float time;
 
 // Add animation parameters you need here
 // See the comments in the SceneParameters and ShaderProgram structs/classes for how to add them on the CPU side
